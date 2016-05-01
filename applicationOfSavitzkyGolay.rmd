@@ -1,0 +1,59 @@
+#Load and prepare data
+Load data as xts object:
+```{r}
+ts<-readRDS('data_broekelei_pump_turbidity.rds')
+```
+
+Reduce data
+
+```{r}
+require("xts")
+ts<-xts::first(ts, n=1440/2)
+ts<-xts::last(ts, n=300)
+
+```
+
+  
+#Savitzky Golay
+
+
+```{r}
+require("prospectr")#savitzky golay
+
+distanceCrit<-100
+ts2<-ts
+smoothTs <- t(savitzkyGolay(t(as.data.frame(ts2)), p=3, w=7, m=0))
+smoothTs<-xts(smoothTs,as.POSIXct(rownames(smoothTs), tz = "GMT", origin = "1970-1-1"))
+names(smoothTs) <- 'smoothTs'
+
+```
+do same conversion for ts as for smoothTs because of accuracy issues in date column of xts(!!??):
+```{r}
+ts2<-as.data.frame(ts2)
+ts2<-xts::xts(ts,as.POSIXct(rownames(ts2), tz = "GMT", origin = "1970-1-1"))
+names(ts2) <- 'ts'
+```
+align time (savitzkyGolay cuts the first elements):
+```{r}
+require("m181")
+require("dygraphs")
+
+
+ts2<-ts2[ time(ts2) %in% time(smoothTs) ]
+smoothTs<-smoothTs[time(smoothTs) %in% time(ts2)]
+
+dygraphs::dygraph(merge(ts2, smoothTs))
+
+my.outlier = ts2
+flag <- which(abs(ts2 - smoothTs) > distanceCrit)
+mode(my.outlier) <- "logical";
+if (identical(flag, integer(0))) {
+  zoo::coredata(my.outlier)[, ] <- TRUE
+} else {
+  my.outlier[flag] <- FALSE
+  my.outlier[-flag] <- TRUE
+}
+
+m181::visualise_dy(ts2, my.outlier)
+```
+Maybe not a good idea, better suited for noise detection?

@@ -1,0 +1,134 @@
+#Load and prepare data
+Load data as xts object:
+```{r}
+ts<-readRDS('data_broekelei_pump_turbidity.rds')
+```
+
+Reduce data
+
+```{r}
+require("xts")
+ts<-xts::first(ts, n=1440/2)
+ts<-xts::last(ts, n=300)
+
+```
+
+# M181 routines
+
+Use m181 library and the required plotting library dygraph:
+```{r message=FALSE}
+require("m181")
+require("dygraphs")
+```
+***
+
+
+Check for and visualize constancy:
+```{r}
+absDiff<-abs(diff(ts[!is.na(ts)]))
+minStepSize<-min(absDiff[!absDiff==0])
+constantValues<-m181::check_constancy(ts, delta_max=minStepSize, relative=FALSE, width=3)
+# this still requires to 'invert' the result for plotting!:
+constantValues<-!constantValues
+m181::visualise_dy(ts, constantValues)
+```
+
+***
+
+Check for and visualize outliers:
+```{r}
+outliers<-m181::check_outlier(ts, sigma_multiplier=2.97875, width=11, moving_window=TRUE, type="mean", verbose=FALSE)
+m181::visualise_dy(ts, outliers)
+```
+
+***
+
+Check for and visualize range:
+```{r}
+outsideRange<-m181::check_range(ts, y_min = 0, y_max = 400)
+m181::visualise_dy(ts, outsideRange)
+```
+
+***
+
+Check for and visualize gradient:
+```{r}
+gradient<-m181::check_gradient(ts, delta_max = 300)
+m181::visualise_dy(ts, gradient)
+```
+First value of timeseries is always flagged as exceeding gradient.
+
+***
+
+Check for and visualize sign:
+```{r}
+signChanges<-m181::check_sign_change(ts, width=3, max_changes = 2)
+m181::visualise_dy(ts, signChanges)
+```
+
+***
+
+
+
+
+
+# Questions
+## NA
+As a first step, remove all NA from the time series:
+(Is this advisable? Or not? Why?)
+```{r}
+ts<-ts[m181::check_na(ts)]
+```
+
+## Equidistance
+What really is percentage here?:
+```{r}
+m181::check_equidistance(ts, percentage=0.5)
+```
+So it's not equidistant. Is this information a prerequisite for other routines?
+
+## Noise
+Would you use noise detection for these data?:
+Check for and visualize noise:
+```{r}
+noise<-m181::check_noise(ts, s_max=3, width=5, moving_s_max=TRUE)
+m181::visualise_dy(ts, noise)
+```
+If so, how would you parameterize it?
+
+## MAD outlier
+How to tune this?:
+```{r}
+madOutlier<-m181::check_mad_outlier(ts, width=3, multiplier=1, constant=1)
+m181::visualise_dy(ts, madOutlier)
+madOutlier<-m181::check_mad_outlier(ts, width=3, multiplier=10, constant=1)
+m181::visualise_dy(ts, madOutlier)
+madOutlier<-m181::check_mad_outlier(ts, width=3, multiplier=1, constant=10)
+m181::visualise_dy(ts, madOutlier)
+madOutlier<-m181::check_mad_outlier(ts, width=3, multiplier=10, constant=10)
+m181::visualise_dy(ts, madOutlier)
+```
+In the last figure, the biggest outlier is not detected.
+Some info on MAD:
+http://eurekastatistics.com/using-the-median-absolute-deviation-to-find-outliers
+
+## Sign
+
+Is sign change really a change of sign, or rather a change of sign of diff(ts)?
+
+
+
+
+# Errors
+## Gaps
+m181::check_gaps(ts)
+results in:
+Error in data.frame(v_gaps_start, v_gaps_end, v_delta_t, type = "value_gap",  : 
+arguments imply differing number of rows: 0, 1
+
+## Plotting
+Not finding any false flags is not an option when plotting:
+outsideRange<-m181::check_range(ts, 0, 9e99)
+m181::visualise_dy(ts, outsideRange)
+  Error in `[.xts`(data, , 2) : subscript out of bounds
+  
