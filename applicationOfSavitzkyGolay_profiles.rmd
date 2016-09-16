@@ -1,0 +1,64 @@
+#Load and prepare data
+Load data as xts object:
+```{r}
+ts<-readRDS('pumpTemp.rds')
+```
+
+Reduce data
+
+```{r}
+require("xts")
+time(ts) <- round(time(ts), "mins")
+ts<-xts::first(ts, n=1440*60)
+ts<-xts::last(ts, n=1440*14)
+
+```
+
+  
+#Savitzky Golay
+
+
+```{r}
+require("prospectr")#savitzky golay
+
+distanceCrit<-1
+ts2<-ts
+width <- 1439
+smoothTs <- t(savitzkyGolay(t(as.data.frame(ts2)), p=9, w=width, m=0))
+smoothTs<-xts(smoothTs,as.POSIXct(rownames(smoothTs), tz = "GMT", origin = "1970-1-1"))
+names(smoothTs) <- 'smoothTs'
+smoothTs0 <- t(savitzkyGolay(t(as.data.frame(ts2)), p=0, w=143, m=0))
+smoothTs0<-xts(smoothTs0,as.POSIXct(rownames(smoothTs0), tz = "GMT", origin = "1970-1-1"))
+names(smoothTs0) <- 'smoothTs0'
+
+```
+align time (savitzkyGolay cuts the first elements) by adding dummy data:
+```{r}
+
+tmpIndex <- 1:((width-1)/2)
+dummyData <- ts2[tmpIndex, ]
+dummyData[ ,1] <- NA
+smoothTs <- rbind(smoothTs, dummyData)
+
+require("dygraphs")
+dygraphs::dygraph(merge(ts2, smoothTs, smoothTs0))
+```
+If noise is really to be flagged (rahter than using the de-noised signal created by a de-noising routine as shown above) then sav gol still seems more useful than moving average:
+```{r}
+my.outlier = ts2
+flag <- which(abs(ts2 - smoothTs) > distanceCrit)
+mode(my.outlier) <- "logical";
+my.outlier[flag] <- FALSE
+my.outlier[-flag] <- TRUE
+
+my.outlier0 = ts2
+flag0 <- which(abs(ts2 - smoothTs0) > distanceCrit)
+mode(my.outlier0) <- "logical";
+my.outlier0[flag0] <- FALSE
+my.outlier0[-flag0] <- TRUE
+
+require("m181")
+m181::visualise_dy(ts2, my.outlier)
+m181::visualise_dy(ts2, my.outlier0)
+```
+
