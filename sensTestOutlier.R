@@ -5,34 +5,39 @@ sens.test.outlier <- function(ts, distanceCritSeq, moving.average, widthSeq = 5,
   }
     else{
     print("m181")
-  }
+    }
+  
+  time(ts) <- round(time(ts), "mins")
+  
+  tsAsDataFrame <- t(as.data.frame(ts))
+  #do same conversion for ts as for smoothTs because of accuracy issues in date column of xts(!!??):
+  tmpTsAsDataFrame <- t(tsAsDataFrame)
+  reconvertedTs <- xts(tmpTsAsDataFrame,as.POSIXct(rownames(tmpTsAsDataFrame), tz = "GMT", origin = "1970-1-1"))
+  names(reconvertedTs) <- 'ts'
+  #reconvertedTs <- ts
   
   sens.test <- NULL
   for (distanceCrit in distanceCritSeq) {
     for (width in widthSeq) {
       plotName <- paste(" distanceCrit ", distanceCrit, " width ", width, collapse = "")
       print(paste("Waiting for results for ", plotName, " ...", collapse = ""))
-      perc.true.values = NaN
+      perc.true.values <- NaN
       if (wannaUseSavitzkyGolay){
-        smoothTs <- t(savitzkyGolay(t(as.data.frame(ts)), p=3, w=width, m=0))
-        smoothTs<-xts(smoothTs,as.POSIXct(rownames(smoothTs), tz = "GMT", origin = "1970-1-1"))
+        smoothTsAsDataFrame <- t(savitzkyGolay(tsAsDataFrame, p=7, w=width, m=0))
+        smoothTs<-xts(smoothTsAsDataFrame,as.POSIXct(rownames(smoothTsAsDataFrame), tz = "GMT", origin = "1970-1-1"))
         names(smoothTs) <- 'smoothTs'
+
+        #align time (savitzkyGolay cuts the first elements) by adding dummy data:
+        tmpIndex <- 1:((width-1)/2)
+        dummyData <- reconvertedTs[tmpIndex, ]
+        dummyData[ ,1] <- NA
+        smoothTs <- rbind(smoothTs, dummyData)
         
-        
-        #do same conversion for ts as for smoothTs because of accuracy issues in date column of xts(!!??):
-        tmpTs<-as.data.frame(ts)
-        tmpTs<-xts(ts,as.POSIXct(rownames(tmpTs), tz = "GMT", origin = "1970-1-1"))
-        names(tmpTs) <- 'ts'
-        
-        #align time (savitzkyGolay cuts the first elements):
-        tmpTs<-tmpTs[ time(tmpTs) %in% time(smoothTs) ]
-        smoothTs<-smoothTs[time(smoothTs) %in% time(tmpTs)]
-        
-        my.outlier = tmpTs
         
         #see m181 code:
-        flag <- which(abs(tmpTs - smoothTs) > distanceCrit)
+        flag <- which(abs(reconvertedTs - smoothTs) > distanceCrit)
 
+        my.outlier <- reconvertedTs
         mode(my.outlier) <- "logical";
         if (identical(flag, integer(0))) {
           zoo::coredata(my.outlier)[, ] <- TRUE
