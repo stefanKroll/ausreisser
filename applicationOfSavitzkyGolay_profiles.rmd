@@ -39,6 +39,7 @@ tmpIndex <- 1:((width-1)/2)
 dummyData <- ts2[tmpIndex, ]
 dummyData[ ,1] <- NA
 smoothTs <- rbind(smoothTs, dummyData)
+smoothTs0 <- rbind(smoothTs0, dummyData)
 
 require("dygraphs")
 dygraphs::dygraph(merge(ts2, smoothTs, smoothTs0))
