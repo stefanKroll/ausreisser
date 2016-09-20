@@ -115,6 +115,11 @@ perfectFits <- allSets[copyIndex, ]
 
 library(knitr)
 kable(perfectFits, digits=1)
+
+df<-data.frame(perfectFits)
+hist(df$distanceCrit)
+hist(df$width)
+hist(df$polynomialDegree)
 ```
 
 
