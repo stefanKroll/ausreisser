@@ -1,0 +1,138 @@
+#Savitzky Golay: find best settings for outlier detection
+SKR, AQF, sep2016:   
+Input:  
+- outliers to be identified   
+- ranges for each parameter to be used for outlier detection (here: distanceCrit, width, polynomial degree)   
+Output:   
+- table of perfect fits (only the outliers identified by the user are identified by the algorithm - not more, not less)   
+- table of all detection results   best
+
+
+#Load and prepare data
+Load data as xts object:
+```{r}
+ts<-readRDS('data_broekelei_pump_turbidity.rds')
+```
+
+Reduce data and round date to full minutes:
+
+```{r,message=FALSE}
+require("xts")
+time(ts) <- round(time(ts), "mins")
+ts<-xts::first(ts, n=1440/2)
+ts<-xts::last(ts, n=300)
+```
+
+#Reference time series of outliers
+These are the points I want R to identify as outliers:
+```{r}
+# EDIT THIS WHEN EDITING YOUR DATA (ts):
+refOutlierTimestamps <- c('2015-04-20 07:25','2015-04-20 08:43','2015-04-20 09:41', '2015-04-20 10:20', '2015-04-20 10:40', '2015-04-20 10:59')
+
+numberOfOutliersToFind <- length(refOutlierTimestamps)
+# get comparable time formats and use later for comparison with result xts:
+refOutlierTimestamps <- xts(matrix(TRUE, ncol=1, nrow=length(refOutlierTimestamps)), as.POSIXct(refOutlierTimestamps, tz = "GMT", origin = "1970-1-1"))
+time(refOutlierTimestamps) <- round(time(refOutlierTimestamps), "mins")
+
+flag <- which(time(ts) %in% time(refOutlierTimestamps))
+refOutliers = ts
+mode(refOutliers) <- "logical";
+refOutliers[flag] <- FALSE
+refOutliers[-flag] <- TRUE
+
+require("m181")
+m181::visualise_dy(ts, refOutliers)
+```
+
+
+#Identify outliers and compare to the reference outliers:
+
+```{r}
+require("prospectr")#savitzky golay
+
+distanceCritSeq <- seq(20, 120, 5)
+widthSeq <- seq(1, 71, 2)
+polynomialDegreeSeq <- seq(0, 11, 1)
+
+setNo <- 0
+allSets <- NULL
+for (distanceCrit in distanceCritSeq) {
+  for (width in widthSeq) {
+    for (polynomialDegree in polynomialDegreeSeq){
+      setNo <- setNo + 1
+      correct <- NA
+      falsePositive <- NA
+      falseNegative <- NA
+      if (polynomialDegree<width) {
+        smoothTs <- t(savitzkyGolay(t(as.data.frame(ts)), p=polynomialDegree, w=width, m=0))
+        smoothTs<-xts(smoothTs,as.POSIXct(rownames(smoothTs), tz = "GMT", origin = "1970-1-1"))
+        names(smoothTs) <- 'smoothTs'
+        
+        #align time (savitzkyGolay cuts the first elements) by adding dummy data:
+        tmpIndex <- 1:((width-1)/2)
+        dummyData <- ts[tmpIndex, ]
+        dummyData[ ,1] <- NA
+        smoothTs <- rbind(smoothTs, dummyData)
+        
+        flag <- which(abs(ts - smoothTs) > distanceCrit)
+        my.outlier = ts
+        mode(my.outlier) <- "logical";
+        my.outlier[flag] <- FALSE
+        my.outlier[-flag] <- TRUE
+        
+        #require("m181")
+        #m181::visualise_dy(ts, my.outlier)
+        
+        identified_correct <- my.outlier[which((!my.outlier) & (!refOutliers))]
+        # false alarm (identified, but shouldn't have heen):
+        identified_falsePositive <- my.outlier[which((!my.outlier) & refOutliers)]
+        # missing alarm (not identified, but should have heen):
+        identified_falseNegative <- my.outlier[which(my.outlier & (!refOutliers))]
+        
+        correct <- length(identified_correct)
+        falsePositive <- length(identified_falsePositive)
+        falseNegative <- length(identified_falseNegative)
+      }
+      # total detection errors: 0 would be perfect
+      detectionErros <- (numberOfOutliersToFind-correct) + falsePositive + falseNegative
+      
+      # collect data:
+      newSet <- cbind(setNo, detectionErros, distanceCrit, width, polynomialDegree, correct, falsePositive, falseNegative)
+      allSets <- rbind(allSets, newSet)
+    }
+  }
+}
+```
+
+
+#Perfect fits:
+
+```{r}
+#reduce allSets to perfect fits:
+copyIndex <- which(0==allSets[, 2])
+copyIndex <- copyIndex[!is.na(copyIndex)]
+perfectFits <- allSets[copyIndex, ]
+
+library(knitr)
+kable(perfectFits, digits=1)
+```
+
+
+#All data:
+
+```{r}
+
+kable(allSets, digits=1)
+
+
+# anybody got ideas for plotting overviews of the results here?
+
+#corrRatio <- matrix(allSets, nrow = length(widthSeq), byrow = FALSE)/numberOfOutliersToFind
+#falsePositiveRatio <- matrix(falsePositive, nrow = length(widthSeq), byrow = FALSE)/numberOfOutliersToFind
+#falseNegativeRatio <- matrix(falseNegative, nrow = length(widthSeq), byrow = FALSE)/numberOfOutliersToFind
+
+
+#require("plot3D")
+#hist3D(widthSeq, polynomialDegreeSeq, corrRatio, xlab='polynomialDegree', ylab='width', zlab='ratio of correct values',  ticktype = "detailed")
+```
+
